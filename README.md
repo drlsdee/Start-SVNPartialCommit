@@ -29,3 +29,5 @@ List of SVN states for changed items. The list loads from JSON file `'SVNStates.
 
 ### -SvnStatesInValid
 List of SVN states for problem items. The list loads from JSON file `'SVNStates.json'` in module's subfolder `'Data'`. Now contains only `'missing'` state. You may override that.
+
+TODO: Bug with item deletion.
