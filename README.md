@@ -25,7 +25,7 @@ If parameter **'AutoAdd'** is set, new unversioned items will be added under ver
 If parameter **'RemoveMissing'** is set, missing items (e.g. removed from your working folder with external command, not `'svn delete'`) will be **deleted** from version control!
 
 ### -SvnStatesValid
-List of SVN states for changed items. The list loads from text file `'SVNStatesValid.txt'` in module's subfolder `'Data'`. Now contains `'deleted'`, `'added'`, `'modified'` and `'replaced'` states.
+List of SVN states for changed items. The list loads from JSON file `'SVNStates.json'` in module's subfolder `'Data'`. Now contains `'deleted'`, `'added'`, `'modified'` and `'replaced'` states. You may override that.
 
 ### -SvnStatesInValid
-List of SVN states for problem items. The list loads from text file `'SVNStatesInValid.txt'` in module's subfolder `'Data'`. Now contains only `'missing'` state.
+List of SVN states for problem items. The list loads from JSON file `'SVNStates.json'` in module's subfolder `'Data'`. Now contains only `'missing'` state. You may override that.
