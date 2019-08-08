@@ -186,6 +186,10 @@ function Start-SVNPartialCommit {
                     $deleteString = "delete $itemPath --force"
                     $outputMissing = Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $deleteString -OutputType StandardError -SkipEmpty
                 })
+
+                # Get status again:
+                $svnRawStatus = Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments 'status -v --xml' -SkipEmpty -OutputType Both
+                $svnInitStatus.LoadXml($svnRawStatus.StandardOutput)
             } else {
                 # Do nothing
                 Write-Warning -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: You have selected do nothing, so all the missing items will be skipped now. You should resolve the problem manually."
