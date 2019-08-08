@@ -4,6 +4,51 @@ $FunctionsToImport.ForEach({
     . $_
 })
 
+<#
+.SYNOPSIS
+    The module allows to split a bunch of changed files in your copy of SVN repository to several commits with defined max count of items in each. The total number of changed items splits into separate SVN changelists.
+.DESCRIPTION
+    The module allows to split a bunch of changed files in your copy of SVN repository to several commits with defined max count of items in each. The total number of changed items splits into separate SVN changelists.
+    GitHub: https://github.com/drlsdee/Start-SVNPartialCommit
+.PARAMETER Repository
+If the module starts in the SVN working folder, it is assumed that the current folder is exactly the copy of the target SVN repository for which you want to commit your changes. Otherwise, you should explicitly specify the path to the SVN repository.
+.PARAMETER SvnExe
+Full path to the SVN client executable file. By default the module searches the executable in all paths included into your '$env:PATH' variable.
+.PARAMETER CommitMessage
+Exactly what is written on the package. If your commit splits into a several commits, numbers from '0' will be added to the end of each message.
+.PARAMETER Count
+Maximum count of changed items per single commit. If the parameter is not set or if the count of changed items is less or equal of number specified, all items will be committed by one transaction.
+.PARAMETER Encoding
+The parameter specifies the encoding for reading the output of the 'svn status' command. It suddenly becomes important if some of the paths in your repository contain characters of national alphabets (e.g. cyrillic). The default value is 'UTF8'. And if you run 'svn status --xml', you can see that the <XML declaration> in output also points to UTF8 encoding. At least today, right now.
+.PARAMETER AutoAdd
+If parameter 'AutoAdd' is set, new unversioned items will be added under version control.
+.PARAMETER RemoveMissing
+If parameter 'RemoveMissing' is set, missing items (e.g. removed from your working folder with external command, not 'svn delete') will be deleted from version control!
+.PARAMETER SvnStatesValid
+List of SVN states for changed items. The list loads from JSON file 'SVNStates.json' in module's subfolder 'Data'. Now contains 'deleted', 'added', 'modified' and 'replaced' states. You may override that.
+.PARAMETER SvnStatesInValid
+List of SVN states for problem items. The list loads from JSON file 'SVNStates.json' in module's subfolder 'Data'. Now contains only 'missing' state. You may override that.
+.EXAMPLE
+    PS C:\> Start-SVNPartialCommit -CommitMessage 'test commit' -Count 10
+    The function runs in current location, finds changed items (if any) and commits them into SVN repository. If total count of changed items is more than 10, the function will split them into several commits. If total count is less or equal than 10, there will be a single commit. New unversioned items and missing items stays untouched.
+.EXAMPLE
+    PS C:\> Start-SVNPartialCommit -CommitMessage 'test commit' -Count 10 -AutoAdd
+    In general the same behavior as in the example 1 above, but new items will be added into version control system. Missing items are still untouched.
+.EXAMPLE
+    PS C:\> Start-SVNPartialCommit -CommitMessage 'test commit' -Count 10 -AutoAdd -RemoveMissing
+    In general the same behavior as in the examples 1 and 2 above, but new items will be added into version control system and missing items will be removed from it.
+.EXAMPLE
+    PS C:\> Start-SVNPartialCommit -Repository '.\TestRepo'
+    The function is launched in the working folder specified in the 'Repository' parameter. All other options are by default. A commit message is not specified, so it will be generated from the user name, computer name, and domain name. The maximum number of items per commit is also not defined, so all items will be committed in one transaction. New and changed files will not be processed.
+.INPUTS
+    [System.String]
+    [System.Int32]
+    [System.Array]
+.OUTPUTS
+    [System.Management.Automation.PSCustomObject]
+.NOTES
+    General notes
+#>
 function Start-SVNPartialCommit {
     [CmdletBinding()]
     param (
@@ -43,15 +88,15 @@ function Start-SVNPartialCommit {
         [switch]
         $RemoveMissing,
 
-        # Valid SVN states for changed items (loaded from text file in the module subfolder, you may override that).
+        # Valid SVN states for changed items (loaded from JSON file in the module subfolder, you may override that).
         [Parameter(DontShow=$true)]
         [array]
-        $SvnStatesValid = (Get-Content -Path "$PSScriptRoot\Data\SVNStatesValid.txt"),
+        $SvnStatesValid,
 
-        # SVN states for problem items, e.g. missing (loaded from text file in the module subfolder, you may override that).
+        # SVN states for problem items, e.g. missing (loaded from JSON file in the module subfolder, you may override that).
         [Parameter(DontShow=$true)]
         [array]
-        $SvnStatesInValid = (Get-Content -Path "$PSScriptRoot\Data\SVNStatesInValid.txt")
+        $SvnStatesInValid
     )
     
     begin {
@@ -100,6 +145,22 @@ function Start-SVNPartialCommit {
 
         if ($AutoAdd) {
             Write-Warning -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: All new unversioned items will be added under version control and committed!"
+        }
+
+        if (-not $SvnStatesValid) {
+            $SvnStatesValid = (Get-Content -Path "$PSScriptRoot\Data\SVNStates.json" | ConvertFrom-Json).SvnStatesValid
+            Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Valid SVN states loaded from file:"
+            $SvnStatesValid.ForEach({
+                Write-Verbose -Message "`"$_`""
+            })
+        }
+
+        if (-not $SvnStatesInValid) {
+            $SvnStatesInValid = (Get-Content -Path "$PSScriptRoot\Data\SVNStates.json" | ConvertFrom-Json).SvnStatesInValid
+            Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Valid SVN states loaded from file:"
+            $SvnStatesInValid.ForEach({
+                Write-Verbose -Message "`"$_`""
+            })
         }
     }
     
