@@ -46,12 +46,12 @@ function Start-SVNPartialCommit {
         # Valid SVN states for changed items (loaded from text file in the module subfolder, you may override that).
         [Parameter(DontShow=$true)]
         [array]
-        $SvnStatesValid = (Get-Content -Path "$PSScriptRoot\Functions\SVNStatesValid.txt"),
+        $SvnStatesValid = (Get-Content -Path "$PSScriptRoot\Data\SVNStatesValid.txt"),
 
         # SVN states for problem items, e.g. missing (loaded from text file in the module subfolder, you may override that).
         [Parameter(DontShow=$true)]
         [array]
-        $SvnStatesInValid = (Get-Content -Path "$PSScriptRoot\Functions\SVNStatesInValid.txt")
+        $SvnStatesInValid = (Get-Content -Path "$PSScriptRoot\Data\SVNStatesInValid.txt")
     )
     
     begin {
@@ -112,6 +112,25 @@ function Start-SVNPartialCommit {
         $svnInitStatus = New-Object -TypeName System.Xml.XmlDocument
         $svnInitStatus.LoadXml($svnRawStatus.StandardOutput)
 
+        # Check for missing items:
+        $itemsMissing = $svnInitStatus.status.target.entry.Where({
+            $_.'wc-status'.item -in $SvnStatesInValid
+        })
+        if ($itemsMissing) {
+            Write-Warning -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Found $($itemsMissing.Count) MISSING or CONFLICTED item(s)"
+            if ($RemoveMissing) {
+                $itemsMissing.ForEach({
+                    $itemPath = Escape-StringWithSpaces -InputString $_.path
+                    Write-Warning -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Item `"$itemPath`" will be DELETED!"
+                    $deleteString = "delete $itemPath --force"
+                    Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $deleteString -OutputType StandardError -SkipEmpty
+                })
+            } else {
+                # Do nothing
+                Write-Warning -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: You have selected do nothing, so all the missing items will be skipped now. You should resolve the problem manually."
+            }
+        }
+
         # Check for new unversioned items:
         $itemsNew = $svnInitStatus.status.target.entry.Where({
             $_.'wc-status'.item -eq 'unversioned'
@@ -126,7 +145,7 @@ function Start-SVNPartialCommit {
                     $itemPath = Escape-StringWithSpaces -InputString $_.path
                     $addString = "add $itemPath --force"
                     Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Adding $itemPath..."
-                    Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $addString -OutputType StandardError -SkipEmpty | Where-Object {($_.Count -gt 0) -and ($_ -notmatch 'EndOfStream')}
+                    Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $addString -OutputType StandardError -SkipEmpty
                 })
                 Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Renew status..."
 
@@ -135,7 +154,7 @@ function Start-SVNPartialCommit {
                 $svnInitStatus.LoadXml($svnRawStatus.StandardOutput)
             } else {
                 # Do nothing
-                Write-Warning -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: New items will be skipped."
+                Write-Warning -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: New items will be skipped. You may run command `'svn add <path-to-item>`' to add new items manually."
             }
         }
 
@@ -144,20 +163,6 @@ function Start-SVNPartialCommit {
             $_.'wc-status'.item -in $SvnStatesValid
         })
         Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Found $($itemsChanged.Count) changed item(s)"
-
-        # Check for missing items:
-        $itemsMissing = $svnInitStatus.status.target.entry.Where({
-            $_.'wc-status'.item -in $SvnStatesInValid
-        })
-        if ($itemsMissing -and $RemoveMissing) {
-            Write-Warning -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Found $($itemsMissing.Count) MISSING or CONFLICTED item(s)"
-            $itemsMissing.ForEach({
-                $itemPath = Escape-StringWithSpaces -InputString $_.path
-                Write-Warning -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Item `"$itemPath`" will be DELETED!"
-                $deleteString = "delete $itemPath --force"
-                Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $deleteString -OutputType StandardError -SkipEmpty | Where-Object {($_.Count -gt 0) -and ($_ -notmatch 'EndOfStream')}
-            })
-        }
 
         # Commit:
         # No changes
@@ -172,7 +177,7 @@ function Start-SVNPartialCommit {
                 Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Item `"$itemPath`" will be committed..."
             })
             $commitString = New-SVNCommitString -CommitMessage $CommitMessage
-            Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $commitString -OutputType StandardError -SkipEmpty | Where-Object {($_.Count -gt 0) -and ($_ -notmatch 'EndOfStream')}
+            Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $commitString -OutputType StandardError -SkipEmpty
         # Commit partially:
         } else {
             $commitCount = [System.Math]::Ceiling($itemsChanged.Count / $Count)
@@ -188,12 +193,12 @@ function Start-SVNPartialCommit {
                     $itemPath = Escape-StringWithSpaces -InputString $_.path
                     Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Item $itemPath added to SVN changelist: $ChangeListName."
                     $ChangeListCommandAdd = $ChangeListCommandPrefix, $itemPath -join ' '
-                    Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $ChangeListCommandAdd -OutputType StandardError -SkipEmpty | Where-Object {($_.Count -gt 0) -and ($_ -notmatch 'EndOfStream')}
+                    Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $ChangeListCommandAdd -OutputType StandardError -SkipEmpty
                 })
             }
             $ChangeListArray.ForEach({
                 $commitString = New-SVNCommitString -ChangeList $_
-                Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $commitString -OutputType StandardError -SkipEmpty| Where-Object {($_.Count -gt 0) -and ($_ -notmatch 'EndOfStream')}
+                Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $commitString -OutputType StandardError -SkipEmpty
                 Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Committing SVN changelist: $_..."
             })
         }
