@@ -108,7 +108,7 @@ function Start-SVNPartialCommit {
         $svnObject = Set-ConsoleAppStartupParameters -FullPath $SvnExe -WorkingDirectory $Repository -OutEncoding $Encoding
 
         # Getting initial status of repository:
-        $svnRawStatus = Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments 'status -v --xml' -SkipEmpty -OutputType StandardOutput
+        $svnRawStatus = Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments 'status -v --xml' -SkipEmpty -OutputType Both
         $svnInitStatus = New-Object -TypeName System.Xml.XmlDocument
         $svnInitStatus.LoadXml($svnRawStatus.StandardOutput)
 
@@ -123,7 +123,7 @@ function Start-SVNPartialCommit {
                     $itemPath = Escape-StringWithSpaces -InputString $_.path
                     Write-Warning -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Item `"$itemPath`" will be DELETED!"
                     $deleteString = "delete $itemPath --force"
-                    Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $deleteString -OutputType StandardError -SkipEmpty
+                    $outputMissing = Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $deleteString -OutputType StandardError -SkipEmpty
                 })
             } else {
                 # Do nothing
@@ -145,12 +145,12 @@ function Start-SVNPartialCommit {
                     $itemPath = Escape-StringWithSpaces -InputString $_.path
                     $addString = "add $itemPath --force"
                     Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Adding $itemPath..."
-                    Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $addString -OutputType StandardError -SkipEmpty
+                    $outputNew = Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $addString -OutputType StandardError -SkipEmpty
                 })
                 Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Renew status..."
 
                 # Get status again:
-                $svnRawStatus = Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments 'status -v --xml' -SkipEmpty -OutputType StandardOutput
+                $svnRawStatus = Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments 'status -v --xml' -SkipEmpty -OutputType Both
                 $svnInitStatus.LoadXml($svnRawStatus.StandardOutput)
             } else {
                 # Do nothing
@@ -177,7 +177,7 @@ function Start-SVNPartialCommit {
                 Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Item `"$itemPath`" will be committed..."
             })
             $commitString = New-SVNCommitString -CommitMessage $CommitMessage
-            Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $commitString -OutputType StandardError -SkipEmpty
+            $outputCommit = Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $commitString -OutputType StandardError -SkipEmpty
         # Commit partially:
         } else {
             $commitCount = [System.Math]::Ceiling($itemsChanged.Count / $Count)
@@ -193,19 +193,35 @@ function Start-SVNPartialCommit {
                     $itemPath = Escape-StringWithSpaces -InputString $_.path
                     Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Item $itemPath added to SVN changelist: $ChangeListName."
                     $ChangeListCommandAdd = $ChangeListCommandPrefix, $itemPath -join ' '
-                    Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $ChangeListCommandAdd -OutputType StandardError -SkipEmpty
+                    $outputAddToCL = Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $ChangeListCommandAdd -OutputType StandardError -SkipEmpty
                 })
             }
             $ChangeListArray.ForEach({
                 $commitString = New-SVNCommitString -ChangeList $_
-                Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $commitString -OutputType StandardError -SkipEmpty
+                $outputCommit = Start-ConsoleAppRedirectOutput -processObject $svnObject -Arguments $commitString -OutputType StandardError -SkipEmpty
                 Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Committing SVN changelist: $_..."
             })
         }
     }
     
     end {
+        # Creating object for output:
+        $OutValues = @{
+            'ErrorsGetStatus' = $svnRawStatus.StandardError
+            'ErrorsAddNew' = $outputNew.StandardError
+            'ErrorsDeleteMissing' = $outputMissing.StandardError
+            'ErrorsChangeList' = $outputAddToCL.StandardError
+            'ErrorsCommit' = $outputCommit.StandardError
+        }
+        $OutObject = New-Object -TypeName psobject -Property $OutValues
+        if ($OutObject.Properties.Where({$_.Value})) {
+            Write-Warning -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Ended with some errors. See below:"
+            $OutObject
+        } else {
+            Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: Ended with no visible errors."
+        }
         Write-Verbose -Message "$(New-TimeStamp) [$($MyInvocation.MyCommand)]: End of function `"$($MyInvocation.MyCommand)`""
+        return
     }
 }
 
