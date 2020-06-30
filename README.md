@@ -1,6 +1,8 @@
 # Start-SVNPartialCommit
 The module allows to split a bunch of changed files in your copy of SVN repository to several commits with defined max count of items in each. The total number of changed items splits into separate SVN changelists.
 
+2020-06-30T03:04Z Repository will be archived.
+
 ## Parameters
 
 ### -Repository
